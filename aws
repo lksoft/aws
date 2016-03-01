@@ -1111,7 +1111,7 @@ unshift @ARGV, $1 if $0 =~ /^(?:.*[\\\/])?(?:(?:ec2|pa|s3|sqs|sdb|rds)-?)?(.+?)(
     @needs_arg{qw(metadata region)} = undef;
 
     my(%meta);
-    @meta{qw(1 assume AWS4 batch cmd0 content_length content_type credential_helper curl curl_options cut d default_curl_cipher delimiter dns_alias dump_xml
+    @meta{qw(1 assume aws_profile AWS4 batch cmd0 content_length content_type credential_helper curl curl_options cut d default_curl_cipher delimiter dns_alias dump_xml
              exec expire_time fail h help http insecure insecure_signing insecure_aws insecureaws install json l limit_rate link max_keys
 	     max_time marker md5 metadata no_vhost netrc_machine parts prefix private progress public queue r region request requester retry role ruby quiet
 	     s3host sanity_check secrets_file set_acl sha1 silent simple sts_host t v verbose vv vvv wait xml yaml)} = undef;
@@ -1249,6 +1249,7 @@ $silent ||= !-t;
 $retry = 3 unless length($retry);
 
 
+$secrets_file ||= "$home/.aws/credentials" if -e "$home/.aws/credentials";
 $secrets_file ||= "$home/.awssecret" if -e "$home/.awssecret";
 $secrets_file ||= "$home/.s3cfg" if -e "$home/.s3cfg";
 $secrets_file ||= "$home/.passwd-s3fs" if -e "$home/.passwd-s3fs";
@@ -1332,7 +1333,23 @@ unless ($awskey && $secret)
             print STDERR "Overriding --secrets-file to [$secrets_file]\n" if $v;
 	}
 
-	if ($secrets_file =~ /s3cfg$/)
+	if ($secrets_file =~ /aws\/credentials$/)
+	{
+	    # if the secrets_file ends with aws, treat it as an .aws config init file
+	    # 	Overrides default
+	    # Poor man's ini parser
+	    my $aws_contents = load_file($secrets_file);
+	    unless ($aws_profile) { $aws_profile = 'default'; };
+		my ($config) = $aws_contents =~ m/^\[$aws_profile\]([^\[]*)/im;
+		unless ($config) {
+			($config) = $aws_contents =~ m/^\[default\]([^\[]*)/im;
+		}
+		unless ($config) {
+			$config = $aws_contents;
+		}
+		($awskey, $secret, $session) = map {$config =~ /^$_\s*=\s*(\S+)/im} qw/aws_access_key_id aws_secret_access_key/;
+	}
+	elsif ($secrets_file =~ /s3cfg$/)
 	{
 	    # if the secrets_file ends with s3cfg, treat it as a s3cmd init file
 	    # 	(can be tested with --secrets-file=s3cfg)
